@@ -8,12 +8,12 @@ from ddpm import DDPM
 from dataset import get_img_shape
 
 
-def sample_imgs(ddpm, net, output_path, n_sample=81, device="cuda", simple_var=True):
+def sample_imgs(ddpm, net, output_path, n_sample=81, device="cuda"):
     net = net.to(device)
     net = net.eval()
     with torch.no_grad():
         shape = (n_sample, *get_img_shape())
-        imgs = ddpm.sample_backward(shape, net, device=device, simple_var=simple_var).detach().cpu()
+        imgs = ddpm.sample_backward(shape, net, device=device).detach().cpu()
         imgs = (imgs + 1) / 2 * 255
         imgs = imgs.clamp(0, 255)
         imgs = einops.rearrange(imgs, "(b1 b2) c h w -> (b1 h) (b2 w) c", b1=int(n_sample**0.5))

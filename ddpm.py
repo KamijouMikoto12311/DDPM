@@ -11,13 +11,16 @@ class DDPM:
         for i, alpha in enumerate(alphas):
             product *= alpha
             alpha_bars[i] = product
+
         self.betas = betas
         self.n_steps = n_steps
         self.alphas = alphas
         self.alpha_bars = alpha_bars
+
         alpha_prev = torch.empty_like(alpha_bars)
         alpha_prev[1:] = alpha_bars[0 : n_steps - 1]
         alpha_prev[0] = 1
+
         self.coef1 = torch.sqrt(alphas) * (1 - alpha_prev) / (1 - alpha_bars)
         self.coef2 = torch.sqrt(alpha_prev) * self.betas / (1 - alpha_bars)
 
@@ -28,14 +31,14 @@ class DDPM:
         res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
         return res
 
-    def sample_backward(self, img_shape, net, device, simple_var=True, clip_x0=True):
+    def sample_backward(self, img_shape, net, device, calc_x0=True):
         x = torch.randn(img_shape).to(device)
         net = net.to(device)
         for t in range(self.n_steps - 1, -1, -1):
-            x = self.sample_backward_step(x, t, net, simple_var, clip_x0)
+            x = self.sample_backward_step(x, t, net, calc_x0)
         return x
 
-    def sample_backward_step(self, x_t, t, net, simple_var=True, clip_x0=True):
+    def sample_backward_step(self, x_t, t, net, calc_x0=True):
 
         n = x_t.shape[0]
         t_tensor = torch.tensor([t] * n, dtype=torch.long).to(x_t.device)
@@ -44,14 +47,11 @@ class DDPM:
         if t == 0:
             noise = 0
         else:
-            if simple_var:
-                var = self.betas[t]
-            else:
-                var = (1 - self.alpha_bars[t - 1]) / (1 - self.alpha_bars[t]) * self.betas[t]
+            var = (1 - self.alpha_bars[t - 1]) / (1 - self.alpha_bars[t]) * self.betas[t]
             noise = torch.randn_like(x_t)
             noise *= torch.sqrt(var)
 
-        if clip_x0:
+        if calc_x0:
             x_0 = (x_t - torch.sqrt(1 - self.alpha_bars[t]) * eps) / torch.sqrt(self.alpha_bars[t])
             x_0 = torch.clip(x_0, -1, 1)
             mean = self.coef1[t] * x_t + self.coef2[t] * x_0
@@ -60,41 +60,3 @@ class DDPM:
         x_t = mean + noise
 
         return x_t
-
-
-def visualize_forward():
-    import cv2
-    import einops
-    import numpy as np
-
-    from dataset import get_dataloader
-
-    n_steps = 200
-    device = "cuda"
-    dataloader = get_dataloader(5)
-    x, _ = next(iter(dataloader))
-    x = x.to(device)
-
-    ddpm = DDPM(device, n_steps)
-    xts = []
-    percents = torch.linspace(0, 0.99, 20)
-    for percent in percents:
-        t = torch.tensor([int(n_steps * percent)])
-        t = t.unsqueeze(1)
-        x_t = ddpm.sample_forward(x, t)
-        xts.append(x_t)
-
-    res = torch.stack(xts, 0)
-    res = einops.rearrange(res, "n1 n2 c h w -> (n2 h) (n1 w) c")
-    res = (res.clip(-1, 1) + 1) / 2 * 255
-    res = res.cpu().numpy().astype(np.uint8)
-
-    cv2.imwrite("work_dirs/diffusion_forward.jpg", res)
-
-
-def main():
-    visualize_forward()
-
-
-if __name__ == "__main__":
-    main()

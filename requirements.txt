@@ -1,0 +1,7 @@
+accelerate==1.6.0
+einops==0.8.1
+numpy==2.2.5
+opencv_python==4.11.0.86
+packaging==25.0
+torch==2.6.0
+torchvision==0.21.0
